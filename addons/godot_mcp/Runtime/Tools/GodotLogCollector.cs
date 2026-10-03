@@ -44,6 +44,14 @@ namespace com.IvanMurzak.Godot.MCP.Tools
         readonly object _gate = new();
         readonly Queue<LogEntry> _entries = new(Capacity);
 
+        /// <summary>Process-wide monotonic sequence counter, shared across all collector instances.
+        /// Incremented with Interlocked for thread-safety; never resets, ensuring sequences always
+        /// increase even when the editor reloads and a fresh collector is installed.</summary>
+        static long _globalNextSequence = 1;
+
+        /// <summary>Process-wide highest sequence ever assigned; retained across collector resets.</summary>
+        static long _globalHighestSequence = 0;
+
         /// <summary>Backing field for <see cref="Current"/>; accessed only through Volatile read/write.</summary>
         static GodotLogCollector? _current;
 
@@ -87,7 +95,8 @@ namespace com.IvanMurzak.Godot.MCP.Tools
             return Interlocked.CompareExchange(ref _current, candidate, null) ?? candidate;
         }
 
-        /// <summary>Append a captured line, evicting the oldest when at <see cref="Capacity"/>.</summary>
+        /// <summary>Append a captured line, evicting the oldest when at <see cref="Capacity"/>. Assigns a
+        /// monotonic sequence number from the process-wide counter.</summary>
         public void Append(LogEntry entry)
         {
             if (entry == null)
@@ -95,6 +104,17 @@ namespace com.IvanMurzak.Godot.MCP.Tools
 
             lock (_gate)
             {
+                // Use Interlocked to safely increment the global counter from any thread.
+                var seq = Interlocked.Increment(ref _globalNextSequence) - 1; // -1 because Increment returns the new value
+                entry.Sequence = seq;
+
+                // Update global highest if this sequence is higher (should always be true, but defensive).
+                long current = Volatile.Read(ref _globalHighestSequence);
+                while (seq > current && Interlocked.CompareExchange(ref _globalHighestSequence, seq, current) != current)
+                {
+                    current = Volatile.Read(ref _globalHighestSequence);
+                }
+
                 if (_entries.Count >= Capacity)
                     _entries.Dequeue();
                 _entries.Enqueue(entry);
@@ -121,16 +141,30 @@ namespace com.IvanMurzak.Godot.MCP.Tools
         }
 
         /// <summary>
-        /// Query the retained lines, newest-first, mirroring Unity-MCP's <c>LogCollector.Query</c>
+        /// The highest sequence number ever assigned across all instances (retained across eviction,
+        /// <see cref="Clear"/>, and collector resets). An agent passes this back as <c>sinceSequence</c> to poll
+        /// only newer entries. 0 before any append. Process-wide, so survives <c>_EnterTree</c> reloads.
+        /// </summary>
+        public long HighestSequence
+        {
+            get { return Volatile.Read(ref _globalHighestSequence); }
+        }
+
+        /// <summary>
+        /// Query the retained lines, newest-first by default, mirroring Unity-MCP's <c>LogCollector.Query</c>
         /// semantics: optional severity filter, optional last-N-minutes window, stack-trace strip, and a
-        /// <paramref name="maxEntries"/> cap applied AFTER ordering (so the cap keeps the most recent
-        /// lines). Returns a fresh array of copies so the caller can serialize off the lock.
+        /// <paramref name="maxEntries"/> cap applied AFTER ordering. When <paramref name="sinceSequence"/> is 0 (default),
+        /// returns all entries newest-first. When > 0, returns only entries with sequence > sinceSequence in ascending
+        /// (oldest-first) order, capping to the oldest page. When sinceSequence is stale (> HighestSequence, indicating
+        /// process restart), returns oldest page of all entries with filters applied. Returns a fresh array of copies so
+        /// the caller can serialize off the lock.
         /// </summary>
         public LogEntry[] Query(
             int maxEntries = 100,
             GodotLogType? logTypeFilter = null,
             bool includeStackTrace = false,
-            int lastMinutes = 0)
+            int lastMinutes = 0,
+            long sinceSequence = 0)
         {
             if (maxEntries < 1)
                 maxEntries = 1;
@@ -141,21 +175,57 @@ namespace com.IvanMurzak.Godot.MCP.Tools
             {
                 IEnumerable<LogEntry> q = _entries;
 
+                // Cursor semantics: a cursor is stale only when sinceSequence > HighestSequence (process restart).
+                // Since HighestSequence is process-wide, this rarely happens and behaves like cursor=0 (below everything).
+                bool stale = sinceSequence > 0 && sinceSequence > Volatile.Read(ref _globalHighestSequence);
+
+                // Apply cursor filter: sequence > sinceSequence (but NOT when stale - treat stale like 0).
+                if (sinceSequence > 0 && !stale)
+                    q = q.Where(e => e.Sequence > sinceSequence);
+
+                // Apply severity filter
                 if (logTypeFilter.HasValue)
                     q = q.Where(e => e.LogType == logTypeFilter.Value);
 
+                // Apply time filter
                 if (cutoff.HasValue)
                     q = q.Where(e => e.Timestamp >= cutoff.Value);
 
-                // Newest-first, then cap. The buffer is FIFO (oldest at head), so reverse to get newest-first.
-                return q
-                    .Reverse()
-                    .Take(maxEntries)
-                    .Select(e => includeStackTrace
-                        ? new LogEntry(e.LogType, e.Message, e.Timestamp, e.StackTrace)
-                        : new LogEntry(e.LogType, e.Message, e.Timestamp, stackTrace: null))
-                    .ToArray();
+                // Convert to list to allow multiple enumerations
+                var matching = q.ToList();
+
+                // Ordering and capping logic
+                if (sinceSequence == 0)
+                {
+                    // Newest-first: reverse, then cap to keep the most recent lines.
+                    return matching
+                        .AsEnumerable()
+                        .Reverse()
+                        .Take(maxEntries)
+                        .Select(e => Copy(e, includeStackTrace))
+                        .ToArray();
+                }
+                else
+                {
+                    // Oldest-first for polling (sinceSequence > 0).
+                    // Contract: cursor → filters → ascending → Take(maxEntries) as oldest page.
+                    // Normal poll (nothing new): matching is empty, returns empty array.
+                    // Stale cursor: matching has filtered entries, returns oldest page.
+                    return matching
+                        .Take(maxEntries)
+                        .Select(e => Copy(e, includeStackTrace))
+                        .ToArray();
+                }
             }
+        }
+
+        /// <summary>Helper to create a copy of a LogEntry, optionally stripping the stack trace.</summary>
+        private static LogEntry Copy(LogEntry e, bool includeStackTrace)
+        {
+            return new LogEntry(e.LogType, e.Message, e.Timestamp, includeStackTrace ? e.StackTrace : null)
+            {
+                Sequence = e.Sequence
+            };
         }
     }
 }

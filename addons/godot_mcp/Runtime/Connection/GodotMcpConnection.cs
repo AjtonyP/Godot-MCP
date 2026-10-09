@@ -67,7 +67,7 @@ namespace com.IvanMurzak.Godot.MCP.Connection
         /// drift if you forget). The live, parsed value in <see cref="PluginVersion"/> is the source of
         /// truth; <see cref="ResolvePluginVersion"/> emits a warning whenever it has to fall back here.
         /// </summary>
-        const string FallbackPluginVersion = "0.23.0";
+        const string FallbackPluginVersion = "0.25.1";
 
         /// <summary>
         /// Plugin version reported to the server in the MCP handshake. Resolved ONCE from
@@ -224,6 +224,7 @@ namespace com.IvanMurzak.Godot.MCP.Connection
         /// SECRET MATERIAL: never logged, never surfaced.
         /// </summary>
         string? _persistedSinkCloudToken;
+        string? _persistedSinkCloudTokenTarget;
 
         /// <summary>One-shot guard so the O8 legacy migration runs at most once per editor session (0 = not yet, 1 = attempted).</summary>
         int _legacyMigrationAttempted;
@@ -248,7 +249,7 @@ namespace com.IvanMurzak.Godot.MCP.Connection
         /// on. The dock's Cloud-auth section passes this to <see cref="GodotDeviceAuthFlow.StartAsync"/> and it
         /// backs the account coordinator's refresh target. Read live off the config so an env override applies.
         /// </summary>
-        public string CloudBaseUrl => GodotMcpConfig.ResolveCloudBaseUrl();
+        public string CloudBaseUrl => GodotMcpConfig.ResolveCloudBaseUrl(_config.CloudBaseUrl);
 
         /// <summary>
         /// The ai-game.dev account-credential coordinator (machine store + proactive/reactive refresh). Exposed
@@ -331,7 +332,8 @@ namespace com.IvanMurzak.Godot.MCP.Connection
             // Construct the account coordinator once (auto-adopts from the machine store at boot — the
             // zero-button rule). The AS base URL is read LIVE off the config so a `.env`/env cloud-URL override
             // reaches refreshes. The store read is safe when absent (returns null → signed out).
-            _account = account ?? new GodotAccountAuth(asBaseUrlProvider: () => CloudBaseUrl);
+            _account = account ?? new GodotAccountAuth(asBaseUrlProvider: () => CloudBaseUrl,
+                store: new MachineCredentialStore(GodotMcpEnvFile.ResolveCredentialsDirectory(ResolveProjectRootPath())));
         }
 
         /// <summary>
@@ -367,16 +369,7 @@ namespace com.IvanMurzak.Godot.MCP.Connection
             // (CloudToken in Cloud mode / CustomToken in Custom mode, env-overridable) so a signed-out machine
             // and every Custom-mode connection behave exactly as before. Set here (not wrapped) so a Reconnect's
             // repeat Start() re-assigns the SAME composite rather than nesting delegates.
-            _config.CredentialProvider = async () =>
-            {
-                if (_config.ActiveMode == GodotMcpConnectionMode.Cloud && _account.IsSignedIn)
-                {
-                    var accountToken = await _account.AccessTokenProvider().ConfigureAwait(false);
-                    if (!string.IsNullOrEmpty(accountToken))
-                        return accountToken;
-                }
-                return _config.Token;
-            };
+            _config.CredentialProvider = _account.CreateConnectionCredentialProvider(_config);
 
             // Instance-metadata handshake (design 04 — mcp-authorize e1, PR 3). Identify THIS editor
             // session to the server so it can route/dedup by account + project + instance instead of by
@@ -650,7 +643,8 @@ namespace com.IvanMurzak.Godot.MCP.Connection
                 return;
 
             var sinkToken = _persistedSinkCloudToken;
-            var serverTarget = GodotMcpConfig.ResolveCloudBaseUrl();
+            // Preserve the sink token's issuer, never relabel it with a newly enrolled Sandbox target.
+            var serverTarget = _persistedSinkCloudTokenTarget ?? GodotMcpConfig.DefaultCloudBaseUrl;
             _ = Task.Run(() =>
             {
                 try
@@ -1247,9 +1241,7 @@ namespace com.IvanMurzak.Godot.MCP.Connection
             if (resolution == null)
                 return;
 
-            _config.ConnectionMode = resolution.Value.Mode;
-            if (resolution.Value.Mode == GodotMcpConnectionMode.Custom && !string.IsNullOrEmpty(resolution.Value.CustomHost))
-                _config.CustomHost = resolution.Value.CustomHost!;
+            _config.ApplyProjectMarker(marker);
 
             GodotMcpLog.Info(
                 $"[Godot-MCP] project marker enrolled server target '{resolution.Value.ServerTarget}' -> mode={resolution.Value.Mode}.");
@@ -1439,6 +1431,7 @@ namespace com.IvanMurzak.Godot.MCP.Connection
             // .env layer (which may also write _config.CloudToken) and the live env override shadow it.
             // The legacy migration must act on exactly what the sink persisted, nothing else.
             _persistedSinkCloudToken = persisted.CloudToken;
+            _persistedSinkCloudTokenTarget = persisted.CloudTokenServerTarget;
 
             GodotMcpConfigStore.ApplyPersisted(_config, persisted);
             GodotMcpLog.Info($"[Godot-MCP] loaded persisted config ({path}).");

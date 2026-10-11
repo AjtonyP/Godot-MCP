@@ -962,8 +962,8 @@ dotnet test   Godot-MCP.Tests/Godot-MCP.Tests.csproj --configuration Debug --no-
 ```
 
 A Godot 4.3+ editor is only needed for live behavioral verification of the engine-driving tools. See
-[`CLAUDE.md`](https://github.com/IvanMurzak/Godot-MCP/blob/main/CLAUDE.md) for the full build/test/run
-runbook, the editor-runtime assembly-load fix, conventions, and the headless testbed smoke.
+[`AGENTS.md`](https://github.com/IvanMurzak/Godot-MCP/blob/main/AGENTS.md) for the build/test commands,
+the editor-runtime assembly-load notes, conventions, and the headless testbed smoke.
 
 Contributions are highly appreciated. **Please give this project a star 🌟 if you find it useful!**
 

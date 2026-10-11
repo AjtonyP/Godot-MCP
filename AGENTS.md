@@ -19,10 +19,10 @@ them here.** The current pins are in `Godot-MCP.csproj` (mirrored by `Godot-MCP.
   into game builds; `Editor/` is the editor-only surface (`#if TOOLS`). Map and the Editor → Runtime
   dependency rule: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). Do NOT put agent/dev files here:
   everything in it ships to consumers (release zip and Asset Library).
-- `addons/godot_mcp/Runtime/Tools/`, `Editor/Tools/` — tools: one `[AiToolType] partial class
-  Tool_<Family>` per family, one partial-class file per `[AiTool("<name>")]` + `[Description]` method.
-  Runtime-safe families in `Runtime/Tools/`, editor-driving ones in `Editor/Tools/`. Tool names mirror
-  Unity-MCP where sensible. Full list: README "Tools Reference".
+- `addons/godot_mcp/{Runtime,Editor}/Tools/` — runtime-safe / editor-driving tool families: one
+  `[AiToolType] partial class Tool_<Family>` per family, one partial-class file per
+  `[AiTool("<name>")]` + `[Description]` method. Names mirror Unity-MCP where sensible; full list in
+  README "Tools Reference".
 - `Godot-MCP.Tests/` — xUnit CI suite; one `<Subject>Tests.cs` per area.
 - `Godot-Tests/` — headless Godot CI testbed + runtime harness ([`Godot-Tests/README.md`](Godot-Tests/README.md)).
 - `cli/` — the `godot-cli` npm package; see [`cli/AGENTS.md`](cli/AGENTS.md).

@@ -25,7 +25,7 @@ import * as path from 'path';
  *
  * `skillsPath` mirrors the Unity definition's per-agent skills directory. The
  * Godot CLI does not yet ship a `setup-skills` command (skills are generated
- * addon-side on plugin boot — see `Godot-MCP/CLAUDE.md` § CLI), but the field is
+ * addon-side on plugin boot), but the field is
  * populated now so a follow-up `setup-skills` command can consume it without
  * another registry migration. `null` means the agent has no project-local skills
  * directory.

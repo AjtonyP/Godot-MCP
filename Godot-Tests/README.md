@@ -72,7 +72,7 @@ degradation (no engine logger, frames null) while the C# channel still captures.
 ## Local run
 
 Mirror the CI smoke against the infra testbed instead (it junctions the live
-addon) — see `../CLAUDE.md` "Testbed runbook". To run this exact project locally,
+addon) — see [`../AGENTS.md`](../AGENTS.md) "Headless live-editor smoke". To run this exact project locally,
 copy the addon in first:
 
 ```bash

@@ -193,7 +193,7 @@ has these field constraints worth knowing before you start:
 The Asset Library does **not** download the curated `godot-mcp-addon-<version>.zip` from the GitHub
 Release — it downloads a **GitHub source archive of the whole repo** at the Download Commit. Without
 intervention that archive would carry `cli/`, `Godot-MCP.Tests/`, `Godot-Tests/`,
-`Godot-MCP.csproj`, `Godot-MCP.sln`, `docs/`, `.github/`, and `CLAUDE.md` straight into the consumer's
+`Godot-MCP.csproj`, `Godot-MCP.sln`, `docs/`, `.github/`, and `AGENTS.md` straight into the consumer's
 project. Because Godot's mono build compiles **every** `.cs` under a project into one assembly, that
 stray test C# would land in the consumer's project and **break their build** — the opposite of
 the install story this release promises.

@@ -75,8 +75,11 @@ trigger of its own, so the only path to a publish is a dispatch of `release.yml`
    - the test gate runs — the .NET build+test, the `godot-cli` node tests (`test_cli.yml`), and the
      Godot 4.3 → 4.7 matrix (addon-load smoke, dock-reload guard, from-scratch e2e install). The
      runtime-harness legs run too but are advisory (not in the publish `needs:`);
-   - `build-addon` zips `addons/godot_mcp/` into `godot-mcp-addon-<version>.zip` (excluding
-     `*.uid`, `*.import`, `bin/`, `obj/`, `.godot/`);
+   - `build-addon` generates `addons/godot_mcp/nuget-deps.json` from `Godot-MCP.csproj`
+     (`scripts/write-nuget-deps.mjs`; gitignored, never committed) and zips `addons/godot_mcp/` into
+     `godot-mcp-addon-<version>.zip` (excluding `*.uid`, `*.import`, `bin/`, `obj/`, `.godot/`).
+     `godot-cli install-plugin` reads that manifest to pin the consumer csproj to the NuGet versions
+     of the addon it installs, not to its own build's constants;
    - `publish-npm` sets `cli/package.json` to the release version, runs `npm ci && npm run
      build && npm test`, then **publishes `godot-cli` to npm** with `npm publish --access public
      --provenance` via **OIDC Trusted Publishing** (no `NPM_TOKEN` — see

@@ -71,8 +71,11 @@ server, set `GODOT_MCP_CONNECTION_MODE=Custom` and `GODOT_MCP_HOST=http://localh
 - **Consumer install.** The addon ships as source, so a consumer `.csproj` must declare the same
   `PackageReference`s AND embed `addons/godot_mcp/extensions.catalog.json` with
   `LogicalName="Godot-MCP.extensions.catalog.json"` (no fallback: missing = empty extension list).
-  `godot-cli install-plugin` writes both; `cli/src/utils/addon-deps.ts` is parity-tested against
-  `Godot-MCP.csproj` (`cli/tests/addon-deps-parity.test.ts`). User-facing steps: README.
+  `godot-cli install-plugin` writes both. It takes the NuGet versions from the INSTALLED addon:
+  `addons/godot_mcp/nuget-deps.json`, generated into the release zip from `Godot-MCP.csproj` by
+  `scripts/write-nuget-deps.mjs` (never committed), or the checkout's csproj for `--source`; the
+  constants in `cli/src/utils/addon-deps.ts` (parity-tested against `Godot-MCP.csproj`) are only the
+  fallback for older zips. User-facing steps: README.
 - **Server pin.** The consumed server version is `ServerVersion` in
   `addons/godot_mcp/Runtime/Connection/GodotMcpServerView.cs`; that release (all 7 RID zips) must exist
   on GameDev-MCP-Server before an addon release pins it. Details: `docs/RELEASING.md`.

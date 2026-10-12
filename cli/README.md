@@ -94,7 +94,7 @@ npx godot-cli install-plugin /path/to/godot/project
 | `setup-skills <agent> [path]` | Generate Godot-MCP skill files (a `SKILL.md`-per-tool-family) under the agent's skills path. `--list` shows each agent's skills support. |
 | `configure [path]` | List / enable / disable tools, prompts, and resources in the project-local `.godot-mcp/features.json`. |
 | `close [path]` | Gracefully stop the Godot editor running for a project (`--force` to hard-kill). |
-| `install-plugin [path]` | Install the `godot_mcp` addon end-to-end: materialize `res://addons/godot_mcp/` (download the matching GitHub release, or `--source <path>` a local copy), add the required NuGet `PackageReference`s + the extension-catalog `<EmbeddedResource>` to the project `.csproj`, and enable the plugin. Idempotent. |
+| `install-plugin [path]` | Install the `godot_mcp` addon end-to-end: materialize `res://addons/godot_mcp/` (download the matching GitHub release, or `--source <path>` a local copy), add the NuGet `PackageReference`s the installed addon needs + the extension-catalog `<EmbeddedResource>` to the project `.csproj`, and enable the plugin. Idempotent. |
 | `install-extension <id> [path]` | Install a Godot-MCP **extension** (an optional AI-tool-family package) into the project: resolve `<id>` from the shared catalog, add/update its `<PackageReference>` in the project `.csproj`, then rebuild to restore. Idempotent — behaviorally identical to the in-editor dock. |
 | `remove-plugin [path]` | Disable the `godot_mcp` addon in `project.godot` `[editor_plugins]` (does not delete the addon files). |
 | `update` | Check npm for a newer `godot-cli` and install it. |
@@ -243,8 +243,11 @@ It performs four steps:
    directory that *is* `addons/godot_mcp` or one that *contains* it.
 2. **Add the NuGet packages** the addon needs (`com.IvanMurzak.ReflectorNet`, `com.IvanMurzak.McpPlugin`)
    to the project's `.csproj`, idempotently — adding when missing, reconciling a stale version, and
-   leaving a correct pin untouched. The versions are single-sourced from the addon's own
-   `Godot-MCP.csproj` pins, so the scaffold can never drift.
+   leaving a correct pin untouched. The versions come from the addon being installed: its
+   `nuget-deps.json` (generated from `Godot-MCP.csproj` into every release zip by the release
+   workflow), or, with `--source` pointing into a Godot-MCP checkout, that checkout's
+   `Godot-MCP.csproj`. Older addon zips
+   without the manifest fall back to the versions built into the CLI, with a warning.
 3. **Embed the extension catalog** (`<EmbeddedResource Include="addons/godot_mcp/extensions.catalog.json"
    LogicalName="Godot-MCP.extensions.catalog.json" />`) into the project's `.csproj`, idempotently. Without
    it the addon's extension registry reads no catalog at editor runtime and the **Extensions panel is

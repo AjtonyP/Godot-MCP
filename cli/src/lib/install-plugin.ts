@@ -290,7 +290,8 @@ function extractAddonEntries(entries: ZipEntry[], projectPath: string, addonDir:
 /**
  * Find the consumer's `.csproj` (the one Godot compiles the addon into) and add
  * the addon's NuGet PackageReferences AND the EmbeddedResource(s) it needs,
- * idempotently and single-sourced from the addon's own pins/embeds. The csproj is
+ * idempotently; the package versions are those of the installed addon
+ * (`resolveAddonNugetDeps`). The csproj is
  * the single `*.csproj` at the project root (the `--dotnet` scaffold writes
  * `<AssemblyName>.csproj` there). When there is no csproj (a GDScript-only
  * project), the patch is skipped with a warning — the addon's C# cannot compile

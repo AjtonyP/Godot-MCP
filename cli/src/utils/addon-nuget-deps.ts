@@ -17,7 +17,7 @@ import { ADDON_PACKAGE_REFERENCES, type AddonPackageReference } from './addon-de
 //     manifest existed), with a warning.
 
 /** File name of the generated manifest inside `addons/godot_mcp/`. */
-export const ADDON_NUGET_DEPS_FILE = 'nuget-deps.json';
+const ADDON_NUGET_DEPS_FILE = 'nuget-deps.json';
 
 /** The addon's own project file, at the root of a Godot-MCP checkout. */
 const ADDON_CSPROJ_FILE = 'Godot-MCP.csproj';

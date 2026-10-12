@@ -430,7 +430,11 @@ jobs:
             -x '*/bin/*' \
             -x '*/obj/*' \
             -x '*/.godot/*'
-          unzip -l "${zip_name}" addons/godot_mcp/nuget-deps.json >/dev/null             || { echo "::error::${zip_name} is missing addons/godot_mcp/nuget-deps.json"; exit 1; }
+          # godot-cli install-plugin reads this manifest; never ship a zip without it.
+          if ! unzip -l "${zip_name}" addons/godot_mcp/nuget-deps.json >/dev/null; then
+            echo "::error::${zip_name} is missing addons/godot_mcp/nuget-deps.json"
+            exit 1
+          fi
           echo "zip_name=${zip_name}" >> "$GITHUB_OUTPUT"
           echo "Created ${zip_name}:"
           unzip -l "${zip_name}"

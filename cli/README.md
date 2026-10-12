@@ -244,8 +244,9 @@ It performs four steps:
 2. **Add the NuGet packages** the addon needs (`com.IvanMurzak.ReflectorNet`, `com.IvanMurzak.McpPlugin`)
    to the project's `.csproj`, idempotently — adding when missing, reconciling a stale version, and
    leaving a correct pin untouched. The versions come from the addon being installed: its
-   `nuget-deps.json` (generated from `Godot-MCP.csproj` into every release zip by the release workflow), or, with
-   `--source` pointing into a Godot-MCP checkout, that checkout's `Godot-MCP.csproj`. Older addon zips
+   `nuget-deps.json` (generated from `Godot-MCP.csproj` into every release zip by the release
+   workflow), or, with `--source` pointing into a Godot-MCP checkout, that checkout's
+   `Godot-MCP.csproj`. Older addon zips
    without the manifest fall back to the versions built into the CLI, with a warning.
 3. **Embed the extension catalog** (`<EmbeddedResource Include="addons/godot_mcp/extensions.catalog.json"
    LogicalName="Godot-MCP.extensions.catalog.json" />`) into the project's `.csproj`, idempotently. Without

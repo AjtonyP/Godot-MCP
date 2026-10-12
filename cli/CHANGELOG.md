@@ -9,8 +9,8 @@ All notable changes to `godot-cli` are documented in this file.
   which the release workflow generates from `Godot-MCP.csproj` into the addon zip — instead of the
   versions baked into this CLI build, so `--version <other>` and `skipMaterialize` over a different
   addon no longer pin mismatched packages. `--source <checkout>/addons/godot_mcp` reads the checkout's
-  `Godot-MCP.csproj`. Addon zips without the manifest (releases up to and including 0.25.2) fall back to the built-in
-  pins with a warning. The library result gains `csproj.packagesOrigin`
+  `Godot-MCP.csproj`. Addon zips without the manifest (releases up to and including 0.25.2) fall
+  back to the built-in pins with a warning. The library result gains `csproj.packagesOrigin`
   (`addon-manifest` | `source-csproj` | `builtin`).
 
 - **Antigravity: two config file locations.** Antigravity reads its global MCP config from

@@ -528,15 +528,10 @@ namespace com.IvanMurzak.Godot.MCP
             }
             catch { /* swallow during unload */ }
 
-            // Flush System.Text.Json's process-wide reflection caches — BOTH families: the reflection-emit
-            // member-accessor cache (compiled delegates over THIS collectible assembly's types) AND every live
-            // JsonSerializerOptions' type-info cache (JsonTypeInfo/JsonPropertyInfo holding resolved addon
-            // Types; JsonSerializerOptions.Default and ReflectorNet/McpPlugin options are static-lifetime roots).
-            // Either family alone keeps the ALC pinned (godot#78513), so do NOT narrow this to an accessor-only
-            // clear. One flush releases every STJ-cached addon type, including the reflection-based ReflectorNet
-            // path that cannot be source-generated. It runs AFTER the connection drain (step 2) so the transport
-            // threads no longer serialize; if that bounded drain timed out, a straggler thread can still
-            // re-populate the caches after this point. Best-effort + fully defensive (see GodotMcpStjReflectionCache).
+            // Flush System.Text.Json's process-wide reflection caches — BOTH families (member-accessor AND every
+            // options' type-info cache); either alone keeps the ALC pinned (godot#78513), so do NOT narrow this to
+            // an accessor-only clear. Rationale: GodotMcpStjReflectionCache. Runs after the connection drain
+            // (step 2); a straggler thread from a timed-out drain can still re-populate the caches afterwards.
             try { GodotMcpStjReflectionCache.Clear(); } catch { /* swallow during unload */ }
 
             // Drop ReflectorNet's process-wide static reflection caches. They live in the NON-collectible Default

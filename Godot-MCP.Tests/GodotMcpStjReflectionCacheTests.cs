@@ -22,35 +22,24 @@ namespace com.IvanMurzak.Godot.MCP.Tests
     // This suite mutates PROCESS-WIDE System.Text.Json caches, so it must not run concurrently with other
     // tests (a concurrent serialization would evict cache entries on its own and mask the pinned/unpinned
     // signal the ALC test reads).
-    [CollectionDefinition("STJ reflection cache", DisableParallelization = true)]
-    public sealed class StjReflectionCacheCollection { }
+    [CollectionDefinition(Name, DisableParallelization = true)]
+    public sealed class StjReflectionCacheCollection
+    {
+        public const string Name = "STJ reflection cache (serial)";
+    }
 
     /// <summary>
-    /// Regression tests for <see cref="GodotMcpStjReflectionCache"/> — the teardown hook that releases
-    /// System.Text.Json's process-wide reflection caches, a root of godotengine/godot#78513 (the caches hold
-    /// resolved addon types / compiled accessor delegates over collectible-ALC types, pinning the context on a
-    /// hot-reload).
-    ///
-    /// <para>
-    /// Three contracts are pinned here:
+    /// Regression tests for <see cref="GodotMcpStjReflectionCache"/> (rationale lives there). Contracts:
     /// <list type="number">
-    ///   <item><b>No-throw / idempotent</b> — the hook runs inside the ALC-unloading handler (both the reload
-    ///   hook and a later <c>_ExitTree</c> reach it), so it may never throw and must tolerate repeat calls.</item>
-    ///   <item><b>The clear actually happens after the reflection path was exercised</b> — this is the
-    ///   regression that shipped: on .NET 8 (the runtime the Godot 4.x .NET editor uses) the member-accessor
-    ///   clear is a STATIC <c>ReflectionEmitCachingMemberAccessor.Clear()</c>, so a fallback that only looked
-    ///   for an INSTANCE <c>Clear()</c> silently returned false and the ALC stayed pinned.</item>
-    ///   <item><b>The pin is really released</b> — a type from a collectible <see cref="AssemblyLoadContext"/>
-    ///   is serialized once (populating both STJ cache families), the context is unloaded, and the context
-    ///   must become collectible after <see cref="GodotMcpStjReflectionCache.Clear"/> — and, separately, after
-    ///   the manual fallback <see cref="GodotMcpStjReflectionCache.ClearManually"/> that <c>Clear</c> never
-    ///   reaches on a supported runtime (so it cannot rot unnoticed). This is the unit-level
-    ///   mirror of the live-editor symptom; the full end-to-end reload remains covered by the headless reload
-    ///   harness (<c>scripts/dock_reload_harness.py</c>).</item>
+    ///   <item><b>No-throw / idempotent</b> — the hook runs inside the ALC-unloading handler, possibly twice.</item>
+    ///   <item><b>A throwing log sink does not turn a successful flush into a reported failure.</b></item>
+    ///   <item><b>The pin is really released</b> — by <see cref="GodotMcpStjReflectionCache.Clear"/> AND by the
+    ///   manual fallback <see cref="GodotMcpStjReflectionCache.ClearManually"/> it never reaches on a supported
+    ///   runtime (so the fallback cannot rot unnoticed). Pre-fix on .NET 8 the clear returned false and the
+    ///   collectible ALC stayed pinned. The end-to-end reload is covered by <c>scripts/dock_reload_harness.py</c>.</item>
     /// </list>
-    /// </para>
     /// </summary>
-    [Collection("STJ reflection cache")]
+    [Collection(StjReflectionCacheCollection.Name)]
     public class GodotMcpStjReflectionCacheTests
     {
         [Fact]
@@ -66,26 +55,6 @@ namespace com.IvanMurzak.Godot.MCP.Tests
                 GodotMcpStjReflectionCache.Clear();
             });
             Assert.Null(ex);
-        }
-
-        [Fact]
-        public void Clear_ReturnsTrue_AfterReflectionSerialization()
-        {
-            // THE REGRESSION: after the reflection path has been used, the clear MUST locate + clear the
-            // caches. Pre-fix on .NET 8 this returned false (static-vs-instance Clear mismatch) and the
-            // collectible ALC stayed pinned on every hot-reload.
-            _ = JsonSerializer.Serialize(new Probe { Value = 7 });
-
-            Assert.True(GodotMcpStjReflectionCache.Clear());
-        }
-
-        [Fact]
-        public void ClearManually_ReturnsTrue_AfterReflectionSerialization()
-        {
-            // The fallback must resolve BOTH cache families on the running STJ build, not just one.
-            _ = JsonSerializer.Serialize(new Probe { Value = 7 });
-
-            Assert.True(GodotMcpStjReflectionCache.ClearManually());
         }
 
         [Fact]

@@ -11,6 +11,7 @@
 using System;
 using System.Collections.Generic;
 using System.Reflection;
+using System.Reflection.Metadata;
 using System.Text.Json;
 
 namespace com.IvanMurzak.Godot.MCP.Connection
@@ -65,18 +66,24 @@ namespace com.IvanMurzak.Godot.MCP.Connection
 
         /// <summary>
         /// Clear System.Text.Json's process-wide reflection caches. Best-effort and never throws.
-        /// Returns <c>true</c> only if BOTH cache families were cleared (so a unit test can assert the
-        /// reflection path still resolves against the running STJ build).
+        /// Returns <c>true</c> when the runtime's update handler ran (it clears both families itself) or, on
+        /// the manual fallback, when BOTH families were cleared (so a unit test can assert the reflection path
+        /// still resolves against the running STJ build).
         /// </summary>
         public static bool Clear()
         {
             try
             {
-                var updateHandler = typeof(JsonSerializer).Assembly.GetType("System.Text.Json.JsonSerializerOptionsUpdateHandler");
-                if (TryInvoke(FindMethod(updateHandler, "ClearCache", BindingFlags.Static, typeof(Type[])), null,
-                        "JsonSerializerOptionsUpdateHandler.ClearCache() invoked (all tracked options caches + member-accessor cache).",
-                        new object?[] { null }))
-                    return true;
+                // Locate the handler through the PUBLIC [assembly: MetadataUpdateHandler] contract rather than its
+                // internal type name, so a rename of JsonSerializerOptionsUpdateHandler does not silently drop us
+                // onto the manual fallback.
+                foreach (var handler in typeof(JsonSerializer).Assembly.GetCustomAttributes<MetadataUpdateHandlerAttribute>())
+                {
+                    if (TryInvoke(FindMethod(handler.HandlerType, "ClearCache", BindingFlags.Static, typeof(Type[])), null,
+                            $"{handler.HandlerType.Name}.ClearCache() invoked (all tracked options caches + member-accessor cache).",
+                            new object?[] { null }))
+                        return true;
+                }
             }
             catch (Exception ex)
             {
@@ -124,15 +131,25 @@ namespace com.IvanMurzak.Godot.MCP.Connection
                     return false;
                 }
 
-                int cleared = 0;
+                // Per-entry guard: one options instance whose ClearCaches() throws must not leave every later
+                // instance's type-info cache (and the collectible types it roots) uncleared.
+                int cleared = 0, failed = 0;
                 foreach (var entry in all)
                 {
-                    clearCaches.Invoke(entry.Key, null);
-                    cleared++;
+                    try
+                    {
+                        clearCaches.Invoke(entry.Key, null);
+                        cleared++;
+                    }
+                    catch (Exception ex)
+                    {
+                        failed++;
+                        SafeLog($"tracked-options entry clear failed (continuing): {Describe(ex)}");
+                    }
                 }
 
-                SafeLog($"cleared {cleared} tracked JsonSerializerOptions cache(s).");
-                return true;
+                SafeLog($"cleared {cleared} tracked JsonSerializerOptions cache(s){(failed > 0 ? $", {failed} failed" : "")}.");
+                return failed == 0;
             }
             catch (Exception ex)
             {

@@ -9,7 +9,6 @@
 */
 #nullable enable
 using System;
-using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.Loader;
 using System.Text.Json;
@@ -19,9 +18,9 @@ using Xunit;
 
 namespace com.IvanMurzak.Godot.MCP.Tests
 {
-    // This suite mutates PROCESS-WIDE System.Text.Json caches, so it must not run concurrently with other
-    // tests (a concurrent serialization would evict cache entries on its own and mask the pinned/unpinned
-    // signal the ALC test reads).
+    // This suite flushes PROCESS-WIDE System.Text.Json caches and swaps the static Log sink, so it must not run
+    // concurrently with other tests (a flush from elsewhere would release the ALC on its own and mask the
+    // pinned/unpinned signal the ALC test reads).
     [CollectionDefinition(Name, DisableParallelization = true)]
     public sealed class StjReflectionCacheCollection
     {
@@ -90,6 +89,10 @@ namespace com.IvanMurzak.Godot.MCP.Tests
             // into this frame (a live local would keep it pinned regardless of the cache flush).
             var alcRef = CreatePinnedCollectibleContext();
 
+            // Negative control: without the flush the context really is pinned. Without this the test would
+            // also pass if something else (e.g. an unload hook in the loaded copy) released the context.
+            Assert.False(WaitForCollection(alcRef, attempts: 5), "the collectible AssemblyLoadContext was not pinned by STJ serialization; the test cannot discriminate");
+
             // The flush must release the context (bounded GC — the runtime needs a few collections).
             Assert.True(manualFallback ? GodotMcpStjReflectionCache.ClearManually() : GodotMcpStjReflectionCache.Clear());
             Assert.True(WaitForCollection(alcRef), "the collectible AssemblyLoadContext stayed pinned after the STJ cache clear");
@@ -106,13 +109,8 @@ namespace com.IvanMurzak.Godot.MCP.Tests
             var alc = new AssemblyLoadContext("stj-pin-alc-test", isCollectible: true);
             var alcRef = new WeakReference(alc, trackResurrection: true);
 
-            // Shared-framework/BCL assemblies resolve from the default context, mirroring Godot's plugin ALC.
-            alc.Resolving += (_, name) =>
-            {
-                try { return AssemblyLoadContext.Default.LoadFromAssemblyName(name); }
-                catch { return null; }
-            };
-
+            // No Resolving hook needed: a custom context whose Load() returns null already falls back to the
+            // default context for shared-framework/BCL/test-host dependencies, mirroring Godot's plugin ALC.
             SerializeTypeFromCollectibleContext(alc);
             alc.Unload();
             return alcRef;

@@ -37,12 +37,14 @@ namespace com.IvanMurzak.Godot.MCP.Tests
     ///   <item><b>No-throw / idempotent</b> — the hook runs inside the ALC-unloading handler (both the reload
     ///   hook and a later <c>_ExitTree</c> reach it), so it may never throw and must tolerate repeat calls.</item>
     ///   <item><b>The clear actually happens after the reflection path was exercised</b> — this is the
-    ///   regression that shipped: on .NET 8 (the runtime Godot 4.x uses) the member-accessor clear is a
-    ///   STATIC <c>ReflectionEmitCachingMemberAccessor.Clear()</c>, so a fallback that only looked for an
-    ///   INSTANCE <c>Clear()</c> silently returned false and the ALC stayed pinned.</item>
+    ///   regression that shipped: on .NET 8 (the runtime the Godot 4.x .NET editor uses) the member-accessor
+    ///   clear is a STATIC <c>ReflectionEmitCachingMemberAccessor.Clear()</c>, so a fallback that only looked
+    ///   for an INSTANCE <c>Clear()</c> silently returned false and the ALC stayed pinned.</item>
     ///   <item><b>The pin is really released</b> — a type from a collectible <see cref="AssemblyLoadContext"/>
     ///   is serialized once (populating both STJ cache families), the context is unloaded, and the context
-    ///   must become collectible after <see cref="GodotMcpStjReflectionCache.Clear"/>. This is the unit-level
+    ///   must become collectible after <see cref="GodotMcpStjReflectionCache.Clear"/> — and, separately, after
+    ///   the manual fallback <see cref="GodotMcpStjReflectionCache.ClearManually"/> that <c>Clear</c> never
+    ///   reaches on a supported runtime (so it cannot rot unnoticed). This is the unit-level
     ///   mirror of the live-editor symptom; the full end-to-end reload remains covered by the headless reload
     ///   harness (<c>scripts/dock_reload_harness.py</c>).</item>
     /// </list>
@@ -78,7 +80,37 @@ namespace com.IvanMurzak.Godot.MCP.Tests
         }
 
         [Fact]
-        public void Clear_ReleasesCollectibleAlcPinnedBySerialization()
+        public void ClearManually_ReturnsTrue_AfterReflectionSerialization()
+        {
+            // The fallback must resolve BOTH cache families on the running STJ build, not just one.
+            _ = JsonSerializer.Serialize(new Probe { Value = 7 });
+
+            Assert.True(GodotMcpStjReflectionCache.ClearManually());
+        }
+
+        [Fact]
+        public void Clear_DoesNotReportFailure_WhenLogSinkThrows()
+        {
+            // A sink that throws on the unload path (e.g. GD.Print on a disposed engine object) must not turn
+            // a successful flush into a reported failure.
+            var previous = GodotMcpStjReflectionCache.Log;
+            GodotMcpStjReflectionCache.Log = _ => throw new InvalidOperationException("sink down");
+            try
+            {
+                _ = JsonSerializer.Serialize(new Probe { Value = 7 });
+                Assert.True(GodotMcpStjReflectionCache.Clear());
+                Assert.True(GodotMcpStjReflectionCache.ClearManually());
+            }
+            finally
+            {
+                GodotMcpStjReflectionCache.Log = previous;
+            }
+        }
+
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void Clear_ReleasesCollectibleAlcPinnedBySerialization(bool manualFallback)
         {
             // Mirror of the live symptom: a type defined in a COLLECTIBLE AssemblyLoadContext is serialized
             // through the default reflection path, which populates STJ's process-wide caches with that
@@ -90,8 +122,8 @@ namespace com.IvanMurzak.Godot.MCP.Tests
             var alcRef = CreatePinnedCollectibleContext();
 
             // The flush must release the context (bounded GC — the runtime needs a few collections).
-            Assert.True(GodotMcpStjReflectionCache.Clear());
-            Assert.True(WaitForCollection(alcRef), "the collectible AssemblyLoadContext stayed pinned after Clear()");
+            Assert.True(manualFallback ? GodotMcpStjReflectionCache.ClearManually() : GodotMcpStjReflectionCache.Clear());
+            Assert.True(WaitForCollection(alcRef), "the collectible AssemblyLoadContext stayed pinned after the STJ cache clear");
         }
 
         /// <summary>
@@ -133,8 +165,12 @@ namespace com.IvanMurzak.Godot.MCP.Tests
             _ = JsonSerializer.Serialize(probe, probeType);
         }
 
-        /// <summary>Bounded forced-GC loop; returns true when the weak reference died (context collected).</summary>
-        static bool WaitForCollection(WeakReference reference, int attempts = 20)
+        /// <summary>
+        /// Bounded forced-GC loop; returns true when the weak reference died (context collected). ALC unload
+        /// completes asynchronously through the LoaderAllocator finalizer chain, so the budget (~10 s) is sized
+        /// for loaded CI runners; a healthy run exits after the first few iterations.
+        /// </summary>
+        static bool WaitForCollection(WeakReference reference, int attempts = 200)
         {
             for (int i = 0; i < attempts; i++)
             {

@@ -7,6 +7,7 @@
 
 import type { ProjectKeyResolver } from '@baizor/gamedev-cli-core';
 import type { ExtensionDescriptor } from '../utils/extensions-catalog.js';
+import type { AddonNugetDepsOrigin } from '../utils/addon-nuget-deps.js';
 
 // ---------------------------------------------------------------------------
 // Progress events
@@ -476,6 +477,12 @@ export interface CsprojPatchOutcome {
   csprojPath?: string;
   /** True when the csproj text was modified (pins and/or embeds). */
   changed: boolean;
+  /**
+   * Where the package versions came from: the installed addon's generated
+   * `nuget-deps.json`, the `--source` checkout's `Godot-MCP.csproj`, or this CLI
+   * build's own pins (`builtin`, for addon zips that predate the manifest).
+   */
+  packagesOrigin: AddonNugetDepsOrigin;
   /** Per-package summary: each addon pin's add / update / unchanged outcome. */
   packages: { id: string; action: 'added' | 'updated' | 'unchanged'; version: string }[];
   /** Per-resource summary: each addon `<EmbeddedResource>`'s add / update / unchanged outcome. */

@@ -316,8 +316,8 @@ Add both `PackageReference`s **and** the extension-catalog `<EmbeddedResource>` 
 
 ```xml
 <ItemGroup>
-  <PackageReference Include="com.IvanMurzak.ReflectorNet" Version="5.4.1" />
-  <PackageReference Include="com.IvanMurzak.McpPlugin"   Version="8.6.0" />
+  <PackageReference Include="com.IvanMurzak.ReflectorNet" Version="5.4.2" />
+  <PackageReference Include="com.IvanMurzak.McpPlugin"   Version="8.7.1" />
 </ItemGroup>
 
 <!-- Embed the extension catalog so the Extensions panel populates (else it is EMPTY). -->
@@ -328,8 +328,8 @@ Add both `PackageReference`s **and** the extension-catalog `<EmbeddedResource>` 
 
 | Package | Version | Role |
 | --- | --- | --- |
-| [`com.IvanMurzak.ReflectorNet`](https://www.nuget.org/packages/com.IvanMurzak.ReflectorNet) | `5.4.1` | Reflection / serialization core |
-| [`com.IvanMurzak.McpPlugin`](https://www.nuget.org/packages/com.IvanMurzak.McpPlugin) | `8.6.0` | MCP plugin client (transitively pulls `McpPlugin.Common` + `ReflectorNet`; carries the shared `AgentConfig` module) |
+| [`com.IvanMurzak.ReflectorNet`](https://www.nuget.org/packages/com.IvanMurzak.ReflectorNet) | `5.4.2` | Reflection / serialization core |
+| [`com.IvanMurzak.McpPlugin`](https://www.nuget.org/packages/com.IvanMurzak.McpPlugin) | `8.7.1` | MCP plugin client (transitively pulls `McpPlugin.Common` + `ReflectorNet`; carries the shared `AgentConfig` module) |
 
 The `<EmbeddedResource>` is **as required as the NuGet pins**: the addon's pure-managed extension
 registry reads the catalog at editor runtime via `GetManifestResourceStream` (no `res://` / filesystem
@@ -962,8 +962,8 @@ dotnet test   Godot-MCP.Tests/Godot-MCP.Tests.csproj --configuration Debug --no-
 ```
 
 A Godot 4.3+ editor is only needed for live behavioral verification of the engine-driving tools. See
-[`CLAUDE.md`](https://github.com/IvanMurzak/Godot-MCP/blob/main/CLAUDE.md) for the full build/test/run
-runbook, the editor-runtime assembly-load fix, conventions, and the headless testbed smoke.
+[`AGENTS.md`](https://github.com/IvanMurzak/Godot-MCP/blob/main/AGENTS.md) for the build/test commands,
+the editor-runtime assembly-load notes, conventions, and the headless testbed smoke.
 
 Contributions are highly appreciated. **Please give this project a star 🌟 if you find it useful!**
 
